@@ -7,8 +7,8 @@ import (
 
 	"golang.org/x/net/context"
 
-	pb "github.com/sewelol/decryptionservice/decryptionservice"
-	dev "github.com/sewelol/decryptionservice/device"
+	pb "github.com/sewelol/sgx-decryption-service/decryptionservice"
+	dev "github.com/sewelol/sgx-decryption-service/device"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )

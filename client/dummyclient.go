@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	pb "github.com/sewelol/decryptionservice/decryptionservice"
+	pb "github.com/sewelol/sgx-decryption-service/decryptionservice"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
