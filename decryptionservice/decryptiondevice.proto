@@ -68,6 +68,9 @@ message PublicKeyRequest {
 // Attestation Quote, containing the public key
 message Quote {
     string quote = 1; //some format.. to be defined later
+    //PEM formatted key 
+    bytes RSA_EncryptionKey = 2;
+    bytes RSA_VerificationKey = 3;
 }
 
 
