@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"log"
 	"net"
 
@@ -24,7 +25,8 @@ var d dev.Device
 type server struct{}
 
 func (s *server) DecryptRecord(ctx context.Context, in *pb.DecryptionRequest) (*pb.Record, error) {
-	return &pb.Record{Plaintext: []byte("plaintext record")}, nil
+	pt := d.Decrypt(in.Ciphertext)
+	return &pb.Record{Plaintext: pt}, nil
 }
 
 func (s *server) GetRootTreeHash(ctx context.Context, in *pb.RootTreeHashRequest) (*pb.RootTreeHash, error) {
@@ -35,12 +37,13 @@ func (s *server) GetRootTreeHash(ctx context.Context, in *pb.RootTreeHashRequest
 
 func (s *server) GetPublicKey(ctx context.Context, in *pb.PublicKeyRequest) (*pb.Quote, error) {
 	ek, vk := d.ExportPubKey()
-	return &pb.Quote{Quote: "{QUOTE: {MRENCLAVE: \"enclave measurement\", MRSIGNER: \"author's identity measurement\", USERDATA: \"public keys\", SIGN: \"attestation signature\"}}", RSA_EncryptionKey: ek, RSA_VerificationKey: vk}, nil
+	return &pb.Quote{Quote: "{QUOTE: {}}", RSA_EncryptionKey: ek, RSA_VerificationKey: vk}, nil
 }
 
 func main() {
 	// Initialize device
 	initialRTH := sha256.Sum256([]byte(""))
+	log.Println("Initial RTH: ", hex.EncodeToString(initialRTH[:]))
 	d.Init(initialRTH[:])
 
 	// Start server
