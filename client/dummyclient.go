@@ -1,13 +1,17 @@
 package main
 
 import (
-	"crypto/rand"
+	"bufio"
+	"crypto"
 	"crypto/rsa"
 	"crypto/sha256"
 	"log"
+	"os"
+	"strings"
 	"sync"
 
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
 
@@ -35,7 +39,7 @@ func main() {
 	c := pb.NewDecryptionDeviceClient(conn)
 
 	//  call GetRootTreeHash
-	rth, err := c.GetRootTreeHash(context.Background(), &pb.RootTreeHashRequest{Nonce: []byte("a long and random byte array")})
+	rth, err := c.GetRootTreeHash(context.Background(), &pb.RootTreeHashRequest{Nonce: []byte("aaaaaaaaaaaaaaaaaaaaaaaa")})
 	if err != nil {
 		log.Fatalf("could not get rth: %v", err)
 	}
@@ -49,35 +53,59 @@ func main() {
 	log.Printf("Quote: %s \n encryption key: %s \n verification key: %s\n\n", pk.Quote, pk.RSA_EncryptionKey, pk.RSA_VerificationKey)
 
 	// import public keys
-	encBlock, _ := pem.Decode(pk.RSA_EncryptionKey)
-	// verBlock, _ := pem.Decode(pk.RSA_VerificationKey)
+	// encBlock, _ := pem.Decode(pk.RSA_EncryptionKey)
+	verBlock, _ := pem.Decode(pk.RSA_VerificationKey)
 
-	encPub, err := x509.ParsePKIXPublicKey(encBlock.Bytes)
+	// encPub, err := x509.ParsePKIXPublicKey(encBlock.Bytes)
 	if err != nil {
 		panic("failed to parse DER encoded public key: " + err.Error())
 	}
-	// verPub, err := x509.ParsePKIXPublicKey(verBlock.Bytes)
-	// if err != nil {
-	// 	panic("failed to parse DER encoded public key: " + err.Error())
-	// }
+	verPub, err := x509.ParsePKIXPublicKey(verBlock.Bytes)
+	if err != nil {
+		panic("failed to parse DER encoded public key: " + err.Error())
+	}
 
-	rsaEncPub, _ := encPub.(*rsa.PublicKey)
-	// rsaVerPub, _ := verPub.(*rsa.PublicKey)
+	// rsaEncPub, _ := encPub.(*rsa.PublicKey)
+	rsaVerPub, _ := verPub.(*rsa.PublicKey)
 
-	rng := rand.Reader
-	label := []byte("record")
+	// Verify RTH
+	h := sha256.Sum256(append(rth.Rth, rth.Nonce...))
 
-	numCrypts := 10
-	log.Printf("Number of encryptions/decryptions %d", numCrypts)
+	err = rsa.VerifyPKCS1v15(rsaVerPub, crypto.SHA256, h[:], rth.Sig)
+	if err != nil {
+		panic("failed to verify signed root tree hash: " + err.Error())
+	}
+	log.Printf("RTH verified: %s", hex.EncodeToString(rth.Rth))
 
+	// Read encrypted records from file
 	ctDB := make(map[[32]byte][]byte)
 
-	for i := 0; i < numCrypts; i++ {
-		pt := []byte{byte(i)}
-		ct, _ := rsa.EncryptOAEP(sha256.New(), rng, rsaEncPub, pt, label)
+	file, err := os.Open("test_set/records.csv")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	// create a new scanner and read the file line by line
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+
+		line := strings.Split(scanner.Text(), ",")
+		// log.Println(line[1])
+
+		ct, err := base64.StdEncoding.DecodeString(line[1])
+		// ctSum, err := hex.DecodeString(line[2])
+
 		ctSum := sha256.Sum256(ct)
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		ctDB[ctSum] = ct
-		log.Printf("EncryptOAEP( %d )", i)
+	}
+	// check for errors
+	if err = scanner.Err(); err != nil {
+		log.Fatal(err)
 	}
 
 	//  Remote call for DecryptRecord (concurrent)
@@ -94,7 +122,7 @@ func main() {
 			if err != nil {
 				log.Fatalf("could not decrypt record: %v", err)
 			}
-			log.Printf("DecryptRecord( ctDB[%s] ) = %d", hex.EncodeToString(sum[:]), r.Plaintext[0])
+			log.Printf("DecryptRecord(%s) = %d", hex.EncodeToString(sum[:]), r.Plaintext[0])
 		}(k, v)
 
 	}

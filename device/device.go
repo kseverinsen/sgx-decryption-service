@@ -7,8 +7,11 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/pem"
+	"io/ioutil"
 	"log"
 )
+
+const DEBUG = true
 
 // Device data
 type Device struct {
@@ -22,8 +25,14 @@ type Device struct {
 // Generate RSA keys
 func (d *Device) Init(initialHash []byte) *Device {
 	d.rootHash = initialHash
-	d.signKey = generateKeyPair()
-	d.decKey = generateKeyPair()
+
+	if DEBUG == true {
+		d.decKey = debugImportRSAKey("test_set/crypt.pem")
+		d.signKey = debugImportRSAKey("test_set/verif.pem")
+	} else {
+		d.decKey = generateKeyPair()
+		d.signKey = generateKeyPair()
+	}
 
 	return d
 }
@@ -54,7 +63,7 @@ func (d *Device) Decrypt(ciphertext []byte) []byte {
 func (d *Device) SignRootTreeHash(nonce []byte) (rth []byte, sig []byte) {
 
 	rng := rand.Reader
-	h := sha256.Sum256(append(rth, nonce...))
+	h := sha256.Sum256(append(d.rootHash, nonce...))
 
 	signature, err := rsa.SignPKCS1v15(rng, d.signKey, crypto.SHA256, h[:])
 	if err != nil {
@@ -95,4 +104,34 @@ func publicKeyToPEM(pk rsa.PublicKey) (pubBytes []byte) {
 		Bytes: PubASN1,
 	})
 	return
+}
+
+func privateKeyToPEM(sk rsa.PrivateKey) (privBytes []byte) {
+	PrivASN1 := x509.MarshalPKCS1PrivateKey(&sk)
+
+	privBytes = pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: PrivASN1,
+	})
+	return
+}
+
+func debugImportRSAKey(filename string) *rsa.PrivateKey {
+
+	pemkey, err := ioutil.ReadFile(filename) // "test_set/crypto.pem"
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	pemBlock, _ := pem.Decode(pemkey)
+	if pemBlock == nil {
+		log.Fatal("No PEM block decoded")
+	}
+
+	key, err := x509.ParsePKCS1PrivateKey(pemBlock.Bytes)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return key
 }
