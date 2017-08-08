@@ -25,8 +25,8 @@ var d dev.Device
 type server struct{}
 
 func (s *server) DecryptRecord(ctx context.Context, in *pb.DecryptionRequest) (*pb.Record, error) {
-	pt := d.Decrypt(in.Ciphertext)
-	return &pb.Record{Plaintext: pt}, nil
+	pt, err := d.Decrypt(in.Ciphertext)
+	return &pb.Record{Plaintext: pt}, err
 }
 
 func (s *server) GetRootTreeHash(ctx context.Context, in *pb.RootTreeHashRequest) (*pb.RootTreeHash, error) {

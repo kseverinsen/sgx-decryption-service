@@ -11,9 +11,10 @@ import (
 	"log"
 )
 
+// DEBUG - use key pairs from file
 const DEBUG = true
 
-// Device data
+// Device global state data
 type Device struct {
 	signKey  *rsa.PrivateKey // Signing key-pair
 	decKey   *rsa.PrivateKey // Decryption key-pair
@@ -40,7 +41,7 @@ func (d *Device) Init(initialHash []byte) *Device {
 // ----------- ECALLs -------------
 
 // Decrypt some ciphertext after verifying proofs that the request have been logged
-func (d *Device) Decrypt(ciphertext []byte) []byte {
+func (d *Device) Decrypt(ciphertext []byte) (plaintext []byte, err error) {
 
 	label := []byte("record")
 	rng := rand.Reader
@@ -50,13 +51,13 @@ func (d *Device) Decrypt(ciphertext []byte) []byte {
 	// Verify ρ: H' extends H
 
 	// result := dec(dk, R)
-	plaintext, err := rsa.DecryptOAEP(sha256.New(), rng, d.decKey, ciphertext, label)
+	plaintext, err = rsa.DecryptOAEP(sha256.New(), rng, d.decKey, ciphertext, label)
 	if err != nil {
-		log.Fatalf("Error from decryption: %s\n", err)
+		log.Printf("Error from decryption: %s\n", err)
 	}
 
 	// H := H'
-	return plaintext
+	return plaintext, err
 }
 
 // SignRootTreeHash returns  RTH and sign(sha256(RTH + nonce)) from device
