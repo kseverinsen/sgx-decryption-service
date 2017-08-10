@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"crypto"
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"log"
@@ -39,7 +40,7 @@ func main() {
 	c := pb.NewDecryptionDeviceClient(conn)
 
 	//  call GetRootTreeHash
-	rth, err := c.GetRootTreeHash(context.Background(), &pb.RootTreeHashRequest{Nonce: []byte("aaaaaaaaaaaaaaaaaaaaaaaa")})
+	rth, err := c.GetRootTreeHash(context.Background(), &pb.RootTreeHashRequest{Nonce: []byte("aaaaaaaaa")})
 	if err != nil {
 		log.Fatalf("could not get rth: %v", err)
 	}
@@ -53,10 +54,10 @@ func main() {
 	log.Printf("Quote: %s \n encryption key: %s \n verification key: %s\n\n", pk.Quote, pk.RSA_EncryptionKey, pk.RSA_VerificationKey)
 
 	// import public keys
-	// encBlock, _ := pem.Decode(pk.RSA_EncryptionKey)
+	encBlock, _ := pem.Decode(pk.RSA_EncryptionKey)
 	verBlock, _ := pem.Decode(pk.RSA_VerificationKey)
 
-	// encPub, err := x509.ParsePKIXPublicKey(encBlock.Bytes)
+	encPub, err := x509.ParsePKIXPublicKey(encBlock.Bytes)
 	if err != nil {
 		panic("failed to parse DER encoded public key: " + err.Error())
 	}
@@ -65,15 +66,31 @@ func main() {
 		panic("failed to parse DER encoded public key: " + err.Error())
 	}
 
-	// rsaEncPub, _ := encPub.(*rsa.PublicKey)
+	rsaEncPub, _ := encPub.(*rsa.PublicKey)
 	rsaVerPub, _ := verPub.(*rsa.PublicKey)
+
+	// test encryption
+	rng := rand.Reader
+	samplePlaintext := []byte("Decrypt RPC successfull")
+	sampleCiphertext, err := rsa.EncryptOAEP(sha256.New(), rng, rsaEncPub, samplePlaintext, []byte("record"))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// test decryption RPC
+	response, err := c.DecryptRecord(context.Background(), &pb.DecryptionRequest{Ciphertext: sampleCiphertext, ProofOfPresence: "{json proof..}", ProofOfExtension: "{json proof...}"})
+	if err != nil {
+		log.Fatalf("could not decrypt record: %v", err)
+	} else {
+		log.Printf("%s\n", response.Plaintext)
+	}
 
 	// Verify RTH
 	h := sha256.Sum256(append(rth.Rth, rth.Nonce...))
 
 	err = rsa.VerifyPKCS1v15(rsaVerPub, crypto.SHA256, h[:], rth.Sig)
 	if err != nil {
-		panic("failed to verify signed root tree hash: " + err.Error())
+		log.Fatalf("failed to verify signed root tree hash: %v", err.Error())
 	}
 	log.Printf("RTH verified: %s", hex.EncodeToString(rth.Rth))
 
@@ -91,10 +108,8 @@ func main() {
 	for scanner.Scan() {
 
 		line := strings.Split(scanner.Text(), ",")
-		// log.Println(line[1])
 
 		ct, err := base64.StdEncoding.DecodeString(line[1])
-		// ctSum, err := hex.DecodeString(line[2])
 
 		ctSum := sha256.Sum256(ct)
 		if err != nil {

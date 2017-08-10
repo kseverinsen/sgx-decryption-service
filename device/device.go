@@ -38,7 +38,7 @@ func (d *Device) Init(initialHash []byte) *Device {
 	return d
 }
 
-// ----------- ECALLs -------------
+// ----------- ECALLs (Interface functions) -------------
 
 // Decrypt some ciphertext after verifying proofs that the request have been logged
 func (d *Device) Decrypt(ciphertext []byte) (plaintext []byte, err error) {
@@ -78,6 +78,46 @@ func (d *Device) ExportPubKey() (encryptionKey, verificationKey []byte) {
 	encryptionKey = publicKeyToPEM(d.decKey.PublicKey)
 	verificationKey = publicKeyToPEM(d.signKey.PublicKey)
 	return
+}
+
+// ---------- Proof verification functions ------------
+
+// def traverse(node, presence_list):
+
+//     if node.has_key("Hash"):
+//         h = node["Hash"]
+//         presence_list.append(h)
+//         return h
+
+//     l = traverse(node.get("Left"), presence_list)
+//     r = traverse(node.get("Right"), presence_list)
+
+//     return hashlib.sha256(l + r).hexdigest()
+
+// traverseProof traverses the proof tree
+func traverseProof(node string, order [32]byte) {
+
+	return
+}
+
+// verifyProofOfPresence parses the json formatted proof, and verifies the result, returns true or false
+func (d *Device) verifyProofOfPresence(str string) bool {
+
+	// presence list
+
+	// Check if current RTH and proof RTH are equal
+
+	// Check if proof_val actually is included in the proof
+
+	// Verify by comparing RTH with the re-computed proof_tree
+
+	return true
+}
+
+// verifyProofOfExtension parses the json formatted proof, and verifies the result, returns true or false
+func (d *Device) verifyProofOfExtension(str string) bool {
+
+	return true
 }
 
 // ---------- AUX functions ------------
@@ -130,6 +170,7 @@ func debugImportRSAKey(filename string) *rsa.PrivateKey {
 	}
 
 	key, err := x509.ParsePKCS1PrivateKey(pemBlock.Bytes)
+	// key, err := x509.ParsePKCS8PrivateKey(pemBlock.Bytes)
 	if err != nil {
 		log.Fatal(err)
 	}
