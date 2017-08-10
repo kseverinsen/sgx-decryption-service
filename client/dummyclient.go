@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -71,11 +72,18 @@ func main() {
 
 	// test encryption
 	rng := rand.Reader
-	samplePlaintext := []byte("Decrypt RPC successfull")
-	sampleCiphertext, err := rsa.EncryptOAEP(sha256.New(), rng, rsaEncPub, samplePlaintext, []byte("record"))
+
+	samplePlaintext := []byte("Decrypt RPC successfull") // If this string is printed in the response, all is well.
+	label := []byte("record")
+	sampleCiphertext, err := rsa.EncryptOAEP(sha256.New(), rng, rsaEncPub, samplePlaintext, label)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	log.Printf("\nEncryption test:\nCipher: RSA OAEP with sha256, \nplaintext(hex) = %s\nlabel(hex) = %s \nciphertext(hex) = %s",
+		hex.EncodeToString(samplePlaintext),
+		hex.EncodeToString(label),
+		hex.EncodeToString(sampleCiphertext))
 
 	// test decryption RPC
 	response, err := c.DecryptRecord(context.Background(), &pb.DecryptionRequest{Ciphertext: sampleCiphertext, ProofOfPresence: "{json proof..}", ProofOfExtension: "{json proof...}"})
@@ -92,9 +100,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to verify signed root tree hash: %v", err.Error())
 	}
-	log.Printf("RTH verified: %s", hex.EncodeToString(rth.Rth))
+	log.Printf("Signed RTH verified (VerifyPKCS1v15): %s", hex.EncodeToString(rth.Rth))
 
-	// Read encrypted records from file
+	// Read encrypted records from file to a hash map
 	ctDB := make(map[[32]byte][]byte)
 
 	file, err := os.Open("test_set/records.csv")
@@ -124,6 +132,7 @@ func main() {
 	}
 
 	//  Remote call for DecryptRecord (concurrent)
+	fmt.Printf("\nDecrypting: %d ciphertexts from file using concurrent RPC calls\n", len(ctDB))
 	var wg sync.WaitGroup
 
 	for k, v := range ctDB {
@@ -137,10 +146,11 @@ func main() {
 			if err != nil {
 				log.Fatalf("could not decrypt record: %v", err)
 			}
-			log.Printf("DecryptRecord(%s) = %d", hex.EncodeToString(sum[:]), r.Plaintext[0])
+			fmt.Printf("\rDecryptRecord(%s) = %d", hex.EncodeToString(sum[:]), r.Plaintext[0])
 		}(k, v)
 
 	}
-	wg.Wait()
 
+	wg.Wait()
+	fmt.Printf("\n")
 }
