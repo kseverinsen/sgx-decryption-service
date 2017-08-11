@@ -70,12 +70,18 @@ func main() {
 	rsaEncPub, _ := encPub.(*rsa.PublicKey)
 	rsaVerPub, _ := verPub.(*rsa.PublicKey)
 
-	// test encryption
+	// test encryption OAEP padding
 	rng := rand.Reader
-
-	samplePlaintext := []byte("Decrypt RPC successfull") // If this string is printed in the response, all is well.
+	samplePlaintext := []byte("Decrypt RPC successfull (OAEP padding)") // If this string is printed in the response, all is well.
 	label := []byte("record")
 	sampleCiphertext, err := rsa.EncryptOAEP(sha256.New(), rng, rsaEncPub, samplePlaintext, label)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// test encryption PKCS#1 v1.5 padding
+	samplePKCS1v15PT := []byte("Decrypt RPC successfull (PKCS1v15 padding)")
+	samplePKCS1v15CT, err := rsa.EncryptPKCS1v15(rng, rsaEncPub, samplePKCS1v15PT)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -85,10 +91,18 @@ func main() {
 		hex.EncodeToString(label),
 		hex.EncodeToString(sampleCiphertext))
 
-	// test decryption RPC
+	// test decryption RPC using OAEP padding
 	response, err := c.DecryptRecord(context.Background(), &pb.DecryptionRequest{Ciphertext: sampleCiphertext, ProofOfPresence: "{json proof..}", ProofOfExtension: "{json proof...}"})
 	if err != nil {
-		log.Fatalf("could not decrypt record: %v", err)
+		log.Printf("could not decrypt record (OAEP padding): %v", err)
+	} else {
+		log.Printf("%s\n", response.Plaintext)
+	}
+
+	// test decryption RPC using PKCS#1 v1.5 padding
+	response, err = c.DecryptRecord(context.Background(), &pb.DecryptionRequest{Ciphertext: samplePKCS1v15CT, ProofOfPresence: "{json proof..}", ProofOfExtension: "{json proof...}"})
+	if err != nil {
+		log.Printf("could not decrypt record (PKCS#1 v1.5 padding): %v", err)
 	} else {
 		log.Printf("%s\n", response.Plaintext)
 	}
@@ -98,7 +112,7 @@ func main() {
 
 	err = rsa.VerifyPKCS1v15(rsaVerPub, crypto.SHA256, h[:], rth.Sig)
 	if err != nil {
-		log.Fatalf("failed to verify signed root tree hash: %v", err.Error())
+		log.Printf("failed to verify signed root tree hash: %v", err.Error())
 	}
 	log.Printf("Signed RTH verified (VerifyPKCS1v15): %s", hex.EncodeToString(rth.Rth))
 

@@ -13,6 +13,7 @@ import (
 
 // DEBUG - use key pairs from file
 const DEBUG = true
+const RSAOAEP = true
 
 // Device global state data
 type Device struct {
@@ -51,9 +52,20 @@ func (d *Device) Decrypt(ciphertext []byte) (plaintext []byte, err error) {
 	// Verify ρ: H' extends H
 
 	// result := dec(dk, R)
-	plaintext, err = rsa.DecryptOAEP(sha256.New(), rng, d.decKey, ciphertext, label)
-	if err != nil {
-		log.Printf("Error from decryption: %s\n", err)
+
+	if RSAOAEP == true {
+
+		plaintext, err = rsa.DecryptOAEP(sha256.New(), rng, d.decKey, ciphertext, label)
+		if err != nil {
+			log.Printf("Error from OAEP decryption: %s\n", err)
+		}
+
+	} else {
+
+		plaintext, err = rsa.DecryptPKCS1v15(rng, d.decKey, ciphertext)
+		if err != nil {
+			log.Printf("Error from PKCS1v15 decryption: %s\n", err)
+		}
 	}
 
 	// H := H'
