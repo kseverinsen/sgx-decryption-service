@@ -92,7 +92,7 @@ func main() {
 		hex.EncodeToString(sampleCiphertext))
 
 	// test decryption RPC using OAEP padding
-	response, err := c.DecryptRecord(context.Background(), &pb.DecryptionRequest{Ciphertext: sampleCiphertext, ProofOfPresence: "{json proof..}", ProofOfExtension: "{json proof...}"})
+	response, err := c.DecryptRecord(context.Background(), &pb.DecryptionRequest{Ciphertext: sampleCiphertext, ProofOfPresence: "{json proof...............}", ProofOfExtension: "{json proof...}"})
 	if err != nil {
 		log.Printf("could not decrypt record (OAEP padding): %v", err)
 	} else {
@@ -100,7 +100,7 @@ func main() {
 	}
 
 	// test decryption RPC using PKCS#1 v1.5 padding
-	response, err = c.DecryptRecord(context.Background(), &pb.DecryptionRequest{Ciphertext: samplePKCS1v15CT, ProofOfPresence: "{json proof..}", ProofOfExtension: "{json proof...}"})
+	response, err = c.DecryptRecord(context.Background(), &pb.DecryptionRequest{Ciphertext: samplePKCS1v15CT, ProofOfPresence: "{json proof...................}", ProofOfExtension: "{json proof...}"})
 	if err != nil {
 		log.Printf("could not decrypt record (PKCS#1 v1.5 padding): %v", err)
 	} else {
@@ -128,17 +128,40 @@ func main() {
 	// create a new scanner and read the file line by line
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-
 		line := strings.Split(scanner.Text(), ",")
-
+		// Decode b64 ciphertext
 		ct, err := base64.StdEncoding.DecodeString(line[1])
-
+		// Calculate hash of ciphertext
 		ctSum := sha256.Sum256(ct)
 		if err != nil {
 			log.Fatal(err)
 		}
-
 		ctDB[ctSum] = ct
+	}
+	// check for errors
+	if err = scanner.Err(); err != nil {
+		log.Fatal(err)
+	}
+
+	// Read proofs for records from file
+	proofFile, err := os.Open("test_set/records_proofs.csv")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer proofFile.Close()
+
+	presenceDB := make(map[string]string)
+	extensionDB := make(map[string]string)
+
+	// Scan proof_file
+	// create a new scanner and read the proofs to proof maps
+	scanner = bufio.NewScanner(proofFile)
+	for scanner.Scan() {
+		line := strings.Split(scanner.Text(), " ")
+
+		presenceDB[line[0]] = line[1]
+		extensionDB[line[0]] = line[2]
+
 	}
 	// check for errors
 	if err = scanner.Err(); err != nil {
@@ -156,7 +179,11 @@ func main() {
 
 			defer wg.Done()
 
-			r, err := c.DecryptRecord(context.Background(), &pb.DecryptionRequest{Ciphertext: ct, ProofOfPresence: "{json proof..}", ProofOfExtension: "{json proof...}"})
+			sumStr := hex.EncodeToString(sum[:])
+			pop := presenceDB[sumStr]
+			poe := extensionDB[sumStr]
+
+			r, err := c.DecryptRecord(context.Background(), &pb.DecryptionRequest{Ciphertext: ct, ProofOfPresence: pop, ProofOfExtension: poe})
 			if err != nil {
 				log.Fatalf("could not decrypt record: %v", err)
 			}
