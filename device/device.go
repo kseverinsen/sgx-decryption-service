@@ -6,9 +6,13 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"io/ioutil"
 	"log"
+
+	pt "github.com/sewelol/sgx-decryption-service/prooftree"
 )
 
 // DEBUG - use key pairs from file
@@ -42,10 +46,18 @@ func (d *Device) Init(initialHash []byte) *Device {
 // ----------- ECALLs (Interface functions) -------------
 
 // Decrypt some ciphertext after verifying proofs that the request have been logged
-func (d *Device) Decrypt(ciphertext []byte) (plaintext []byte, err error) {
+func (d *Device) Decrypt(ciphertext []byte, pop, poe pt.ProofTree) (plaintext []byte, err error) {
 
 	label := []byte("record")
 	rng := rand.Reader
+
+	ctSum := sha256.Sum256(ciphertext)
+	if d.verifyProofOfPresence(ctSum, pop) {
+		log.Println(hex.EncodeToString(ctSum[:]), "verified")
+	} else {
+		err = errors.New("Presence could not be verified: " + hex.EncodeToString(ctSum[:]))
+		return
+	}
 
 	// Verify π: R in H'
 
@@ -94,34 +106,67 @@ func (d *Device) ExportPubKey() (encryptionKey, verificationKey []byte) {
 
 // ---------- Proof verification functions ------------
 
-// def traverse(node, presence_list):
-
-//     if node.has_key("Hash"):
-//         h = node["Hash"]
-//         presence_list.append(h)
-//         return h
-
-//     l = traverse(node.get("Left"), presence_list)
-//     r = traverse(node.get("Right"), presence_list)
-
-//     return hashlib.sha256(l + r).hexdigest()
-
 // traverseProof traverses the proof tree
-func traverseProof(node string, order [32]byte) {
+func traverseProof(node pt.ProofNode, order *[][32]byte) [32]byte {
+	var l, r [32]byte
 
-	return
+	if node.Hash != "" {
+		b, err := hex.DecodeString(node.Hash)
+		if err != nil {
+			log.Fatal(err)
+		}
+		ret, err := sliceToHash(b)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		*order = append(*order, ret)
+
+		return ret
+	}
+
+	l = traverseProof(*node.Left, order)
+	r = traverseProof(*node.Right, order)
+
+	// hack  to comply with Dom's hash tree
+	// TODO: Dom should hash the byte array, not the hex encoded string..
+	ls := hex.EncodeToString(l[:])
+	rs := hex.EncodeToString(r[:])
+	buf := []byte(ls + rs)
+
+	// buf := append(l[:], r[:]...)
+
+	return sha256.Sum256(buf)
 }
 
 // verifyProofOfPresence parses the json formatted proof, and verifies the result, returns true or false
-func (d *Device) verifyProofOfPresence(str string) bool {
+func (d *Device) verifyProofOfPresence(ctSum [32]byte, p pt.ProofTree) bool {
 
 	// presence list
+	order := new([][32]byte)
 
-	// Check if current RTH and proof RTH are equal
+	// Traverse proof tree, compute the new RTH and add leafs to order
+	computedRTH := traverseProof(p.Root, order)
+
+	// Decode Hex string and copy to an array
+	buf, err := hex.DecodeString(p.RTH)
+	if err != nil {
+		return false
+	}
+	declaredRTH, err := sliceToHash(buf)
+	if err != nil {
+		return false
+	}
+
+	// Check if declared RTH and computed RTH are equal
+	if declaredRTH != computedRTH {
+		return false
+	}
 
 	// Check if proof_val actually is included in the proof
-
-	// Verify by comparing RTH with the re-computed proof_tree
+	if containsHash(*order, ctSum) != true {
+		return false
+	}
 
 	return true
 }
@@ -188,4 +233,23 @@ func debugImportRSAKey(filename string) *rsa.PrivateKey {
 	}
 
 	return key
+}
+
+func containsHash(s [][32]byte, e [32]byte) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
+}
+
+func sliceToHash(slice []byte) (hash [32]byte, err error) {
+	if len(slice) > len(hash) {
+		err = errors.New("sliceToHash: slice is to long")
+		return
+	}
+
+	copy(hash[:], slice)
+	return
 }

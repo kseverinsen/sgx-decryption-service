@@ -10,6 +10,7 @@ import (
 
 	pb "github.com/sewelol/sgx-decryption-service/decryptionservice"
 	dev "github.com/sewelol/sgx-decryption-service/device"
+	pt "github.com/sewelol/sgx-decryption-service/prooftree"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
@@ -25,7 +26,12 @@ var d dev.Device
 type server struct{}
 
 func (s *server) DecryptRecord(ctx context.Context, in *pb.DecryptionRequest) (*pb.Record, error) {
-	pt, err := d.Decrypt(in.Ciphertext)
+
+	popTree, err := pt.UnmarshalProofTree(in.ProofOfPresence)
+	poeTree, err := pt.UnmarshalProofTree(in.ProofOfExtension)
+
+	pt, err := d.Decrypt(in.Ciphertext, *popTree, *poeTree)
+
 	return &pb.Record{Plaintext: pt}, err
 }
 
