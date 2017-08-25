@@ -10,7 +10,6 @@ import (
 	"log"
 	"os"
 	"strings"
-	"sync"
 
 	"crypto/x509"
 	"encoding/base64"
@@ -25,6 +24,7 @@ import (
 const (
 	address     = "localhost:50051"
 	defaultName = "world"
+	rsaSpecTest = false
 )
 
 type leaf struct {
@@ -91,20 +91,22 @@ func main() {
 		hex.EncodeToString(label),
 		hex.EncodeToString(sampleCiphertext))
 
-	// test decryption RPC using OAEP padding
-	response, err := c.DecryptRecord(context.Background(), &pb.DecryptionRequest{Ciphertext: sampleCiphertext, ProofOfPresence: "{json proof...............}", ProofOfExtension: "{json proof...}"})
-	if err != nil {
-		log.Printf("could not decrypt record (OAEP padding): %v", err)
-	} else {
-		log.Printf("%s\n", response.Plaintext)
-	}
+	if rsaSpecTest {
+		// test decryption RPC using OAEP padding
+		response, err := c.DecryptRecord(context.Background(), &pb.DecryptionRequest{Ciphertext: sampleCiphertext, ProofOfPresence: "{json proof...............}", ProofOfExtension: "{json proof...}"})
+		if err != nil {
+			log.Printf("could not decrypt record (OAEP padding): %v", err)
+		} else {
+			log.Printf("%s\n", response.Plaintext)
+		}
 
-	// test decryption RPC using PKCS#1 v1.5 padding
-	response, err = c.DecryptRecord(context.Background(), &pb.DecryptionRequest{Ciphertext: samplePKCS1v15CT, ProofOfPresence: "{json proof...................}", ProofOfExtension: "{json proof...}"})
-	if err != nil {
-		log.Printf("could not decrypt record (PKCS#1 v1.5 padding): %v", err)
-	} else {
-		log.Printf("%s\n", response.Plaintext)
+		// test decryption RPC using PKCS#1 v1.5 padding
+		response, err = c.DecryptRecord(context.Background(), &pb.DecryptionRequest{Ciphertext: samplePKCS1v15CT, ProofOfPresence: "{json proof...................}", ProofOfExtension: "{json proof...}"})
+		if err != nil {
+			log.Printf("could not decrypt record (PKCS#1 v1.5 padding): %v", err)
+		} else {
+			log.Printf("%s\n", response.Plaintext)
+		}
 	}
 
 	// Verify RTH
@@ -162,36 +164,29 @@ func main() {
 		presenceDB[line[0]] = line[1]
 		extensionDB[line[0]] = line[2]
 
+		ctSum := [32]byte{}
+		ctSumSlice, err := hex.DecodeString(line[0])
+
+		copy(ctSum[:], ctSumSlice)
+
+		ct := ctDB[ctSum]
+		pop := line[1]
+		poe := line[2]
+
+		r, err := c.DecryptRecord(context.Background(), &pb.DecryptionRequest{Ciphertext: ct, ProofOfPresence: pop, ProofOfExtension: poe})
+		if err != nil {
+			log.Printf("could not decrypt record: %v", err)
+		} else {
+			fmt.Printf("\rDecryptRecord(%s) = %d", hex.EncodeToString(ctSum[:]), r.Plaintext[0])
+
+		}
+
 	}
 	// check for errors
 	if err = scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
 
-	//  Remote call for DecryptRecord (concurrent)
-	fmt.Printf("\nDecrypting: %d ciphertexts from file using concurrent RPC calls\n", len(ctDB))
-	var wg sync.WaitGroup
+	//  Remote call for DecryptRecord
 
-	for k, v := range ctDB {
-		wg.Add(1)
-
-		go func(sum [32]byte, ct []byte) {
-
-			defer wg.Done()
-
-			sumStr := hex.EncodeToString(sum[:])
-			pop := presenceDB[sumStr]
-			poe := extensionDB[sumStr]
-
-			r, err := c.DecryptRecord(context.Background(), &pb.DecryptionRequest{Ciphertext: ct, ProofOfPresence: pop, ProofOfExtension: poe})
-			if err != nil {
-				log.Fatalf("could not decrypt record: %v", err)
-			}
-			fmt.Printf("\rDecryptRecord(%s) = %d", hex.EncodeToString(sum[:]), r.Plaintext[0])
-		}(k, v)
-
-	}
-
-	wg.Wait()
-	fmt.Printf("\n")
 }
