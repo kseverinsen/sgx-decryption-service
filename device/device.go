@@ -48,22 +48,31 @@ func (d *Device) Init(initialHash []byte) *Device {
 // Decrypt some ciphertext after verifying proofs that the request have been logged
 func (d *Device) Decrypt(ciphertext []byte, pop, poe pt.ProofTree) (plaintext []byte, err error) {
 
-	label := []byte("record")
-	rng := rand.Reader
-
+	// Measure given ciphertext
 	ctSum := sha256.Sum256(ciphertext)
-	if d.verifyProofOfPresence(ctSum, pop) {
-		log.Println(hex.EncodeToString(ctSum[:]), "verified")
-	} else {
-		err = errors.New("Presence could not be verified: " + hex.EncodeToString(ctSum[:]))
-		return
-	}
 
 	// Verify π: R in H'
+	posRTH, err := d.verifyProofOfPresence(ctSum, pop)
+	if err != nil {
+		return nil, err
+	}
 
 	// Verify ρ: H' extends H
+	poeRTH, err := d.verifyProofOfExtension(ctSum, poe)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if proofs match
+	poeRTH = posRTH //bypass
+	if posRTH != poeRTH {
+		err = errors.New("Proofs could not be verified: Proof of presence/extension RTH missmatch")
+		return nil, err
+	}
 
 	// result := dec(dk, R)
+	label := []byte("record") //OAEP label
+	rng := rand.Reader
 
 	if RSAOAEP == true {
 
@@ -140,41 +149,45 @@ func traverseProof(node pt.ProofNode, order *[][32]byte) [32]byte {
 }
 
 // verifyProofOfPresence parses the json formatted proof, and verifies the result, returns true or false
-func (d *Device) verifyProofOfPresence(ctSum [32]byte, p pt.ProofTree) bool {
+func (d *Device) verifyProofOfPresence(ctSum [32]byte, p pt.ProofTree) (computedRTH [32]byte, err error) {
 
 	// presence list
 	order := new([][32]byte)
 
 	// Traverse proof tree, compute the new RTH and add leafs to order
-	computedRTH := traverseProof(p.Root, order)
+	computedRTH = traverseProof(p.Root, order)
 
 	// Decode Hex string and copy to an array
 	buf, err := hex.DecodeString(p.RTH)
 	if err != nil {
-		return false
+		return
 	}
 	declaredRTH, err := sliceToHash(buf)
 	if err != nil {
-		return false
+		return
 	}
 
 	// Check if declared RTH and computed RTH are equal
 	if declaredRTH != computedRTH {
-		return false
+		err = errors.New("Presence could not be verified: Declared and computed RTH missmatch")
+		return
 	}
 
 	// Check if proof_val actually is included in the proof
 	if containsHash(*order, ctSum) != true {
-		return false
+		err = errors.New("Presence could not be verified: Record not present in proof tree")
+		return
 	}
 
-	return true
+	// The value is present in the valid RTH that was just computed.
+	// Return computed RTH
+	return computedRTH, nil
 }
 
 // verifyProofOfExtension parses the json formatted proof, and verifies the result, returns true or false
-func (d *Device) verifyProofOfExtension(str string) bool {
+func (d *Device) verifyProofOfExtension(ctSum [32]byte, p pt.ProofTree) (computedRTH [32]byte, err error) {
 
-	return true
+	return computedRTH, nil
 }
 
 // ---------- AUX functions ------------
