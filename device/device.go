@@ -1,6 +1,7 @@
 package device
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -64,11 +65,13 @@ func (d *Device) Decrypt(ciphertext []byte, pop, poe pt.ProofTree) (plaintext []
 	}
 
 	// Check if proofs match
-	poeRTH = posRTH //bypass
 	if posRTH != poeRTH {
 		err = errors.New("Proofs could not be verified: Proof of presence/extension RTH missmatch")
 		return nil, err
 	}
+
+	// new root tree hash after decryption
+	newRTH := poeRTH
 
 	// result := dec(dk, R)
 	label := []byte("record") //OAEP label
@@ -90,6 +93,8 @@ func (d *Device) Decrypt(ciphertext []byte, pop, poe pt.ProofTree) (plaintext []
 	}
 
 	// H := H'
+	log.Printf("Record decrypted! New RTH: %s", hex.EncodeToString(newRTH[:]))
+	d.rootHash = newRTH[:]
 	return plaintext, err
 }
 
@@ -185,9 +190,32 @@ func (d *Device) verifyProofOfPresence(ctSum [32]byte, p pt.ProofTree) (computed
 }
 
 // verifyProofOfExtension parses the json formatted proof, and verifies the result, returns true or false
-func (d *Device) verifyProofOfExtension(ctSum [32]byte, p pt.ProofTree) (computedRTH [32]byte, err error) {
+func (d *Device) verifyProofOfExtension(ctSum [32]byte, p pt.ProofTree) (RTH [32]byte, err error) {
 
-	return computedRTH, nil
+	// Presence lists
+	var oldOrder [][32]byte
+	var newOrder [][32]byte
+
+	// Compute old and new RTH
+	oldComputedRTH := traverseProof(p.OldProof, &oldOrder)
+	newComputedRTH := traverseProof(p.NewProof, &newOrder)
+
+	// Check if computed old RTH match device's RTH
+	if bytes.Compare(oldComputedRTH[:], d.rootHash) > 0 {
+		err = errors.New("Proof RTH does not match current internal state")
+		return
+	}
+
+	// Check that oldOrder is a subset of newOrder
+	for i, v := range oldOrder {
+		if v != newOrder[i] {
+			err = errors.New("Old proof is not a subset of new proof")
+			return
+		}
+	}
+
+	RTH = newComputedRTH
+	return RTH, nil
 }
 
 // ---------- AUX functions ------------

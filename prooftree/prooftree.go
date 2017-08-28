@@ -7,9 +7,11 @@ import (
 
 // ProofTree holds proof objects
 type ProofTree struct {
-	RTH    string    `json:"RTH"`
-	Record string    `json:"Value"`
-	Root   ProofNode `json:"Proof"`
+	RTH      string    `json:"RTH,omitempty"`
+	Record   string    `json:"Value,omitempty"`
+	Root     ProofNode `json:"Proof,omitempty"`
+	OldProof ProofNode `json:"OldProof,omitempty"`
+	NewProof ProofNode `json:"NewProof,omitempty"`
 }
 
 // ProofNode represents a node in the Merkle-tree
