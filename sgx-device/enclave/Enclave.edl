@@ -1,0 +1,82 @@
+/*
+ * Copyright (C) 2011-2017 Intel Corporation. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *   * Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
+ *   * Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer in
+ *     the documentation and/or other materials provided with the
+ *     distribution.
+ *   * Neither the name of Intel Corporation nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
+
+/* Enclave.edl - Top EDL file. */
+
+enclave {
+
+include "sgx_tseal.h"
+from "sgx_tsgxssl.edl" import *;
+
+#define RSA_BLOCK_SIZE 384
+
+    /* 
+     * uprint - invokes OCALL to display string buffer inside the enclave.
+     *  [in]: copy the string buffer to App outside.
+     *  [string]: specifies 'str' is a NULL terminated buffer.
+     */
+    untrusted {
+        void uprint([in, string] const char *str);
+        void usgx_exit(int reason);
+    };
+
+
+    trusted {
+        
+ 
+        public sgx_status_t t_initialize_enclave_state( [in, size=sealed_size]sgx_sealed_data_t* sealed_state, 
+                                                        size_t sealed_size);
+
+
+        public sgx_status_t t_get_public_keys(	    [out , size=pem_enc_key_len]uint8_t *pem_enc_key, 
+                                                    size_t 	pem_enc_key_len,
+                                                    [out , size=pem_verif_key_len]uint8_t *pem_verif_key, 
+                                                    size_t 	pem_verif_key_len);
+
+
+        public sgx_status_t t_decrypt_record(       [in, size=RSA_BLOCK_SIZE]  uint8_t *encrypted_record, 
+                                                    [out, size=RSA_BLOCK_SIZE] uint8_t *decrypted_record, 
+                                                    [out, count=1]   size_t *decrypted_len);
+
+
+        public sgx_status_t t_get_root_tree_hash(   [in, size=nonce_len] uint8_t *nonce, 
+                                                    size_t nonce_len, 
+                                                    [out, size=root_tree_hash_len] uint8_t *root_tree_hash, 
+                                                    size_t root_tree_hash_len,
+                                                    [out, size=signature_len] uint8_t *signature, 
+                                                    size_t signature_len);
+
+	 
+
+        public void t_test_rsa();
+ 
+    };
+};
